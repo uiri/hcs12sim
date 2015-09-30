@@ -685,6 +685,7 @@ void sts(unsigned char opcode) {
 void sub_accum(unsigned char opcode) {
   unsigned char operand = getop(opcode & LAST_QUARTER);
   unsigned char *accum;
+  char res;
   switch (opcode & THIRD_QUARTER) {
   case 8:
     accum = &ACCUM_A;
@@ -695,13 +696,35 @@ void sub_accum(unsigned char opcode) {
   default:
     return;
   }
-  /* flags register */
-  *accum -= operand;
+  res = *accum - operand;
+  if (res < 0) {
+    cc |= 0x08;
+  } else {
+    cc &= 0xF7;
+  }
+  if (!res) {
+    cc |= 0x04;
+  } else {
+    cc &= 0xFC;
+  }
+  if ((*accum & MSB_SET    &&   operand & MSB_SET  && res > 0) ||
+      (!(*accum & MSB_SET) && !(operand & MSB_SET) && res < 0)) {
+    cc |= 0x02;
+  } else {
+    cc &= 0xFD;
+  }
+  if (((unsigned char)res) < *accum) {
+    cc |= 0x01;
+  } else {
+    cc &= 0xFE;
+  }
+  *accum = res;
 }
 
 void cmp_accum(unsigned char opcode) {
   unsigned char operand = getop(opcode & LAST_QUARTER);
   unsigned char *accum;
+  char res;
   switch (opcode & THIRD_QUARTER) {
   case 8:
     accum = &ACCUM_A;
@@ -712,7 +735,28 @@ void cmp_accum(unsigned char opcode) {
   default:
     return;
   }
-  /* flags register for subtraction */
+  res = *accum - operand;
+  if (res < 0) {
+    cc |= 0x08;
+  } else {
+    cc &= 0xF7;
+  }
+  if (!res) {
+    cc |= 0x04;
+  } else {
+    cc &= 0xFC;
+  }
+  if ((*accum & MSB_SET    &&   operand & MSB_SET  && res > 0) ||
+      (!(*accum & MSB_SET) && !(operand & MSB_SET) && res < 0)) {
+    cc |= 0x02;
+  } else {
+    cc &= 0xFD;
+  }
+  if (((unsigned char)res) < *accum) {
+    cc |= 0x01;
+  } else {
+    cc &= 0xFE;
+  }
 }
 
 void sbc_accum(unsigned char opcode) {
@@ -799,7 +843,216 @@ void load_accum(unsigned char opcode) {
 }
 
 void clr_tst_accum(unsigned char opcode) {
-
+  unsigned short* reg = 0, sh;
+  unsigned char* accum = 0;
+  unsigned char operand, c;
+  if (opcode & SECOND_BIT) {
+    if (opcode & THIRD_BIT) {
+      operand = getop(opcode);
+      /* set flags register per operand value */
+    } else {
+      if (opcode & FIRST_BIT) {
+	operand = readbyte(pc++);
+	switch (operand & SECOND_HALF) {
+	case 0:
+	  accum = &ACCUM_A;
+	  break;
+	case 1:
+	  accum = &ACCUM_B;
+	  break;
+	case 2:
+	  reg = &cc;
+	  break;
+	case 4:
+	  reg = &d.reg;
+	  break;
+	case 5:
+	  reg = &x;
+	  break;
+	case 6:
+	  reg = &y;
+	  break;
+	case 7:
+	  reg = &sp;
+	  break;
+	default:
+	  return;
+	}
+	switch ((operand & FIRST_HALF) >> 4) {
+	case 0:
+	  if (reg) {
+	    *reg = ACCUM_A;
+	  } else {
+	    *accum = ACCUM_A;
+	  }
+	  break;
+	case 1:
+	  if (reg) {
+	    *reg = ACCUM_B;
+	  } else {
+	    *accum = ACCUM_B;
+	  }
+	  break;
+	case 2:
+	  if (reg) {
+	    *reg = cc;
+	  } else {
+	    *accum = *(((unsigned char*)&cc) + 1);
+	  }
+	  break;
+	case 4:
+	  if (reg) {
+	    *reg = d.reg;
+	  } else {
+	    *accum = ACCUM_B;
+	  }
+	  break;
+	case 5:
+	  if (reg) {
+	    *reg = x;
+	  } else {
+	    *accum = *(((unsigned char*)&x) + 1);
+	  }
+	  break;
+	case 6:
+	  if (reg) {
+	    *reg = y;
+	  } else {
+	    *accum = *(((unsigned char*)&y) + 1);
+	  }
+	  break;
+	case 7:
+	  if (reg) {
+	    *reg = sp;
+	  } else {
+	    *accum = *(((unsigned char*)&sp) + 1);
+	  }
+	  break;
+	case 8:
+	  if (reg) {
+	    sh = *reg;
+	    *reg = ACCUM_A;
+	    ACCUM_A = *(((unsigned char*)&sh) + 1);
+	  } else {
+	    c = *accum;
+	    *accum = ACCUM_A;
+	    ACCUM_A = c;
+	  }
+	  break;
+	case 9:
+	  if (reg) {
+	    sh = *reg;
+	    *reg = ACCUM_B;
+	    ACCUM_B = *(((unsigned char*)&sh) + 1);
+	  } else {
+	    c = *accum;
+	    *accum = ACCUM_B;
+	    ACCUM_B = c;
+	  }
+	  break;
+	case 10:
+	  if (reg) {
+	    sh = *reg;
+	    *reg = cc;
+	    cc = *(((unsigned char*)&sh) + 1);
+	  } else {
+	    c = *accum;
+	    *accum = cc;
+	    cc = c;
+	  }
+	  break;
+	case 12:
+	  if (reg) {
+	    sh = *reg;
+	    *reg = d.reg;
+	    d.reg = sh;
+	  } else if (accum == &ACCUM_B) {
+	    ACCUM_A = 0xFF;
+	  } else {
+	    c = ACCUM_B;
+	    ACCUM_B = ACCUM_A;
+	    ACCUM_A = c;
+	  }
+	  break;
+	case 13:
+	  if (reg) {
+	    sh = *reg;
+	    *reg = x;
+	    x = sh;
+	  } else if (accum == &ACCUM_B) {
+	    c = ACCUM_B;
+	    ACCUM_B = *(((unsigned char*)&x) + 1);
+	    x = 0xFF;
+	    x = x << 8;
+	    x += c;
+	  } else {
+	    c = ACCUM_A;
+	    x = 0x00;
+	    ACCUM_A = *(((unsigned char*)&x) + 1);
+	    x = 0x00;
+	    x = x << 8;
+	    x += c;
+	  }
+	  break;
+	case 14:
+	  if (reg) {
+	    sh = *reg;
+	    *reg = y;
+	    y = sh;
+	  } else if (accum == &ACCUM_B) {
+	    c = ACCUM_B;
+	    ACCUM_B = *(((unsigned char*)&y) + 1);
+	    y = 0xFF;
+	    y = y << 8;
+	    y += c;
+	  } else {
+	    c = ACCUM_A;
+	    y = 0x00;
+	    ACCUM_A = *(((unsigned char*)&y) + 1);
+	    y = 0x00;
+	    y = y << 8;
+	    y += c;
+	  }
+	  break;
+	case 15:
+	  if (reg) {
+	    sh = *reg;
+	    *reg = sp;
+	    sp = sh;
+	  } else if (accum == &ACCUM_B) {
+	    c = ACCUM_B;
+	    ACCUM_B = *(((unsigned char*)&sp) + 1);
+	    sp = 0xFF;
+	    sp = sp << 8;
+	    sp += c;
+	  } else {
+	    c = ACCUM_A;
+	    sp = 0x00;
+	    ACCUM_A = *(((unsigned char*)&sp) + 1);
+	    sp = 0x00;
+	    sp = sp << 8;
+	    sp += c;
+	  }
+	  break;
+	default:
+	  return;
+	}
+      } else {
+	return; /* NOP instruction */
+      }
+    }
+  } else {
+    if (opcode & THIRD_BIT) {
+      accum = &ACCUM_B;
+    } else {
+      accum = &ACCUM_A;
+    }
+    if (opcode & FIRST_BIT) {
+      /* set flags register per *accum value */
+    } else {
+      *accum = 0;
+    }
+  }
 }
 
 void xor_accum(unsigned char opcode) {
