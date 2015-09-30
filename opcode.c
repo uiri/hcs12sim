@@ -287,7 +287,7 @@ void lea(unsigned char opcode) {
   default:
     return;
   }
-  *reg = getop_short(2);
+  *reg = getop_addr(2);
 }
 
 void bset(unsigned char addr_type) {
@@ -1183,6 +1183,78 @@ void cp_ld_sp(unsigned char opcode) {
     break;
   default:
     return;
+  }
+}
+
+void mov(unsigned char opcode) {
+  unsigned short src_addr, dest_addr;
+  unsigned char *dst, src_byte;
+  switch (opcode) {
+  case 0:
+    dest_addr = getop_addr(2);
+    src_byte = getop(0);
+    dst = getptr(dest_addr++);
+    *dst = src_byte;
+    src_byte = getop(0);
+    dst = getptr(dest_addr);
+    *dst = src_byte;
+    return;
+  case 1:
+  case 9:
+    dest_addr = getop_addr(2);
+    src_addr = getop_addr(3);
+    break;
+  case 2:
+  case 10:
+    dest_addr = getop_addr(2);
+    src_addr = getop_addr(2);
+    break;
+  case 3:
+    dest_addr = getop_addr(3);
+    src_byte = getop(0);
+    dst = getptr(dest_addr++);
+    *dst = src_byte;
+    src_byte = getop(0);
+    dst = getptr(dest_addr);
+    *dst = src_byte;
+    return;
+  case 4:
+  case 12:
+    dest_addr = getop_addr(3);
+    src_addr = getop_addr(3);
+    break;
+  case 5:
+  case 13:
+    dest_addr = getop_addr(3);
+    src_addr = getop_addr(2);
+    break;
+  case 8:
+    dest_addr = getop_addr(2);
+    src_byte = getop(0);
+    dst = getptr(dest_addr);
+    *dst = src_byte;
+    return;
+  case 11:
+    dest_addr = getop_addr(3);
+    src_byte = getop(0);
+    dst = getptr(dest_addr);
+    *dst = src_byte;
+    return;
+  case 14:
+    ACCUM_B = ACCUM_A;
+    return;
+  case 15:
+    ACCUM_A = ACCUM_B;
+    return;
+  default:
+    printf("Unimplemented opcode in MOV column.");
+    return;
+  }
+  dst = getptr(dest_addr++);
+  *dst = readbyte(src_addr++);
+  if (!(opcode & FOURTH_BIT)) {
+    dst = getptr(dest_addr);
+    *dst = readbyte(src_addr);
   }
 }
 

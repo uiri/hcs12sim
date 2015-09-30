@@ -21,8 +21,10 @@ void execute(void) {
     c = readbyte(pc++);
     if (c == 0x18) { /* second byte */
       c = readbyte(pc++);
-      if (c & BRANCH) {
-	long_branch(c);
+      if ((c & FIRST_HALF) == BRANCH) {
+	long_branch(c & SECOND_HALF);
+      } else if (!(c & FIRST_HALF)) {
+	mov(c & SECOND_HALF);
       } else {
 	printf("Unimplemented second byte: ");
 	printbyte(c);
