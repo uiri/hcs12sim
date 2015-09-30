@@ -1,5 +1,6 @@
 #include "consts.h"
 #include "helper.h"
+#include <stdlib.h>
 #include <stdio.h>
 
 extern union reg_accum d;
@@ -26,7 +27,7 @@ extern unsigned short pc, x, y, sp, cc;
   break
 
 unsigned short getop_addr(unsigned char opcode) {
-  unsigned short *reg, addr;
+  unsigned short *reg, indir_addr, addr;
   unsigned char c, idx;
   char five_bits;
   switch (opcode & LAST_QUARTER) {
@@ -94,7 +95,7 @@ unsigned short getop_addr(unsigned char opcode) {
 	switch (idx & LAST_QUARTER) {
 	case 0:
 	  c = readbyte(pc++);
-	  c = readbyte(*reg + c);
+	  return *reg + c;
 	  break;
 	case 1:
 	  c = readbyte(pc++);
@@ -110,13 +111,16 @@ unsigned short getop_addr(unsigned char opcode) {
 	  addr = readbyte(pc++);
 	  addr = addr << 8;
 	  addr += readbyte(pc++);
-	  addr = readbyte(*reg + addr);
-	  return addr;
+	  indir_addr = readbyte(*reg + addr);
+	  indir_addr = indir_addr << 8;
+	  indir_addr += readbyte(*reg + addr + 1);
+	  return indir_addr;
 	  break;
 	default:
 	  break;
 	}
       }
+      break;
     default:
       break;
     }
@@ -135,12 +139,12 @@ unsigned short getop_short(unsigned char opcode) {
   unsigned short sh, addr;
   if (!(opcode & LAST_QUARTER)) {
     sh = readbyte(pc++);
-    sh = sh << 4;
+    sh = sh << 8;
     sh += readbyte(pc++);
   } else {
     addr = getop_addr(opcode);
     sh = readbyte(addr++);
-    sh = sh << 4;
+    sh = sh << 8;
     sh += readbyte(addr);
   }
   return sh;
@@ -245,7 +249,21 @@ void jsr(unsigned char opcode) {
   default:
     return;
   }
-  operand = getop_short(opcode);
+  operand = getop_addr(opcode);
+  if (operand == 0xEE86) {
+    putchar(ACCUM_B);
+    return;
+  }
+  if (operand == 0xEE84) {
+    ACCUM_B = getchar();
+    if (ACCUM_B == 10)
+      ACCUM_B = getchar();
+    return;
+  }
+  if (operand == 0xEE88) {
+    printf((char*)getptr(d.reg));
+    return;
+  }
   sp--;
   sp--;
   mem = (unsigned short*)stackptr(sp);
@@ -344,39 +362,39 @@ void pshpul(unsigned char opcode) {
       break;
     case 2:
       if (opcode & THIRD_BIT) {
-	addr = stackptr(sp);
-	ACCUM_B = *addr;
-	sp++;
-      } else {
 	sp--;
 	addr = stackptr(sp);
-	*addr = ACCUM_B;
+	*addr = ACCUM_A;
+      } else {
+	addr = stackptr(sp);
+	ACCUM_A = *addr;
+	sp++;
       }
       return;
     case 3:
       if (opcode & THIRD_BIT) {
-	addr = stackptr(sp);
-	ACCUM_A = *addr;
-	sp++;
-      } else {
 	sp--;
 	addr = stackptr(sp);
-	*addr = ACCUM_A;
+	*addr = ACCUM_B;
+      } else {
+	addr = stackptr(sp);
+	ACCUM_B = *addr;
+	sp++;
       }
       return;
     default:
       break;
     }
     if (opcode & THIRD_BIT) {
-      addr = stackptr(sp);
-      *reg = *((unsigned short*)addr);
-      sp++;
-      sp++;
-    } else {
       sp--;
       sp--;
       addr = stackptr(sp);
       *((unsigned short*)addr) = *reg;
+    } else {
+      addr = stackptr(sp);
+      *reg = *((unsigned short*)addr);
+      sp++;
+      sp++;
     }
   } else if (opcode < 12) {
     if (opcode & SECOND_BIT) {
@@ -394,7 +412,7 @@ void pshpul(unsigned char opcode) {
       sp--;
       addr = stackptr(sp);
       *((unsigned short*)addr) = *reg;
-    }    
+    }
   } else {
     switch (opcode) {
     case 12:
@@ -410,7 +428,7 @@ void pshpul(unsigned char opcode) {
       /* Wait for interrupt */
       break;
     case 15:
-      /* Software interrupt */
+      exit(0);
       break;
     default:
       break;

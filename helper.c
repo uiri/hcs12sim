@@ -25,38 +25,46 @@ void printbyte(char bytebuf) {
 unsigned char readbyte(unsigned short addr) {
   List* l;
   Segment* s;
+  if (0xEE83 < addr && addr < 0xEE8A) {
+    return addr%2 == 0 ? 0xEE : (((unsigned char)addr) - 1);
+  }
   for (l = seglist;l != NULL;l = l->next) {
     s = l->data;
     if (s->addr <= addr && addr <= (s->addr + s->len)) {
-      if (addr+1 == pc) {
-	printbyte(s->buf[addr - s->addr]);
-      }
+      /* if (addr+1 == pc) { */
+      /* 	printbyte(s->buf[addr - s->addr]); */
+      /* } */
       return s->buf[addr - s->addr];
     }
   }
   return 0;
 }
 
-unsigned char* getptr(short addr) {
+unsigned char* getptr(unsigned short addr) {
   List* l;
   Segment* s;
   for (l = seglist;l != NULL;l = l->next) {
     s = l->data;
-    if (s->addr <= addr && addr < (s->addr + s->len)) {
+    if (s->addr <= addr && addr <= (s->addr + s->len)) {
       return &(s->buf[addr - s->addr]);
     }
   }
   return 0;
 }
 
-unsigned char* stackptr(short sp) {
+unsigned char* stackptr(unsigned short sp) {
   unsigned char* ptr;
   Segment* s;
   ptr = getptr(sp);
   if (!ptr) {
     s = malloc(sizeof(Segment));
-    s->len = 1024;
-    s->addr = sp - s->len + 1;
+    if (sp < 1024) {
+      s->len = sp;
+      s->addr = 0;
+    } else {
+      s->len = 1024;
+      s->addr = sp - s->len + 1;
+    }
     s->buf = malloc(s->len + 1);
     s->buf[s->len] = '\0';
     addToListEnd(seglist, s);

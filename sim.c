@@ -19,9 +19,6 @@ void execute(void) {
   unsigned int i;
   for (;;) {
     c = readbyte(pc++);
-    /* printf("Opcode: "); */
-    /* printbyte(c); */
-    /* printf("\n"); */
     if (c == 0x18) { /* second byte */
       c = readbyte(pc++);
       if (c & BRANCH) {
@@ -30,17 +27,19 @@ void execute(void) {
 	printf("Unimplemented second byte: ");
 	printbyte(c);
 	printf("\n");
+	return;
       }
     } else if (c == 0x04) { /* loop instruction */
+      printf("loop\n");
       c = readbyte(pc++);
       /* decompose into instruction */
     } else if (c & MSB_SET) {
       msb_opcode_array[c & SECOND_HALF]((c & FIRST_HALF) >> 4);
     } else if (c & SMSB_SET) {
       smsb_opcode_array[c & SECOND_HALF]((c & FIRST_HALF) >> 4);
-    } else if (c & BRANCH) {
+    } else if ((c & FIRST_HALF) == BRANCH) {
       short_branch(c & SECOND_HALF);
-    } else if ((c & PSHPUL) == PSHPUL) {
+    } else if ((c & FIRST_HALF) == PSHPUL) {
       pshpul(c & SECOND_HALF);
     } else if ((c & SECOND_HALF) > 11) {
       branch_clr_set[(c & SECOND_HALF) - 12](((c & FIRST_HALF) >> 4) + 2);
@@ -116,12 +115,10 @@ void execute(void) {
 	printf("Unimplemented opcode: ");
 	printbyte(c);
 	printf("\n");
-	break;
+	return;
       }
     }
-    printf("\n");
   }
-  return;
 }
 
 int main(int argc, char** argv) {
