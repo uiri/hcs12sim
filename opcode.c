@@ -5,6 +5,7 @@
 
 extern union reg_accum d;
 extern unsigned short pc, x, y, sp, cc;
+extern unsigned char ppage;
 
 #define INDEXED(a) if (idx & FIFTH_BIT) {\
     five_bits = ((~five_bits) + 1) & SECOND_HALF;\
@@ -242,6 +243,18 @@ short branch(unsigned char opcode) {
     return 0;
   }
   return 1;
+}
+
+void divmul(unsigned char opcode) {
+  unsigned short denominator;
+  switch (opcode) {
+  case 0:
+    denominator = x;
+    x = (unsigned short)(d.reg / denominator);
+    d.reg = (unsigned short)(d.reg % denominator);
+  default:
+    return;
+  }
 }
 
 void jmp(unsigned char opcode) {
@@ -658,11 +671,28 @@ void clr(unsigned char opcode) {
   }
 }
 
+void call(unsigned char opcode) {
+  unsigned short operand, *mem;
+  unsigned char newpage;
+  operand = getop_addr(opcode);
+  newpage = getop(0);
+  sp--;
+  sp--;
+  mem = (unsigned short*)stackptr(sp);
+  *mem = pc;
+  sp--;
+  mem = (unsigned short*)stackptr(sp);
+  *mem = ppage;
+  ppage = newpage;
+  pc = operand;
+}
+
 void staa(unsigned char opcode) {
   unsigned short addr;
   unsigned char* mem;
   if (!(opcode & LAST_QUARTER)) {
-    /* Call with extended */
+    call(3);
+    return;
   }
   addr = getop_addr(opcode);
   mem = getptr(addr);
@@ -673,7 +703,8 @@ void stab(unsigned char opcode) {
   unsigned short addr;
   unsigned char* mem;
   if (!(opcode & LAST_QUARTER)) {
-    /* Call with indirect */
+    call(2);
+    return;
   }
   addr = getop_addr(opcode);
   mem = getptr(addr);

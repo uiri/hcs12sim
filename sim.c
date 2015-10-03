@@ -17,6 +17,7 @@ extern void (*branch_clr_set[4])(unsigned char addr_type);
 void execute(void) {
   unsigned char c;
   unsigned int i;
+  unsigned char *mem;
   for (;;) {
     c = readbyte(pc++);
     if (c == 0x18) { /* second byte */
@@ -25,6 +26,8 @@ void execute(void) {
 	long_branch(c & SECOND_HALF);
       } else if (!(c & FIRST_HALF)) {
 	mov(c & SECOND_HALF);
+      } else if ((c & FIRST_HALF) == FIFTH_BIT) {
+	divmul(c & SECOND_HALF);
       } else {
 	printf("Unimplemented second byte: ");
 	printbyte(c);
@@ -73,9 +76,11 @@ void execute(void) {
 	x--;
 	break;
       case 0x0A:
-	/* (M_SP) -> ppage */
+	mem = stackptr(sp);
+	ppage = *mem;
 	sp++;
-	/* (M_SP) -> pc */
+	mem = stackptr(sp);
+	pc = *((unsigned short*)mem);
 	sp++;
 	sp++;
 	break;

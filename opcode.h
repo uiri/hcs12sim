@@ -6,3 +6,4 @@ void long_branch(unsigned char opcode);
 void short_branch(unsigned char opcode);
 void pshpul(unsigned char opcode);
 void mov(unsigned char opcode);
+void divmul(unsigned char opcode);
