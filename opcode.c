@@ -7,14 +7,16 @@ extern union reg_accum d;
 extern unsigned short pc, x, y, sp, cc;
 
 #define INDEXED(a) if (idx & FIFTH_BIT) {\
-    five_bits = (~five_bits) + 1;\
+    five_bits = ((~five_bits) + 1) & SECOND_HALF;\
+    five_bits *= -1;\
   }\
   return a + five_bits\
 
 #define CREMENT(a) five_bits++;\
   if (five_bits > 8) {\
     five_bits -= 8;\
-    five_bits = (~five_bits) + 1;\
+    five_bits = ((~five_bits) + 1) & SECOND_HALF;\
+    five_bits *= -1;\
   }\
   if (!(idx & FIFTH_BIT)) {\
     a += five_bits;\
@@ -25,6 +27,39 @@ extern unsigned short pc, x, y, sp, cc;
     return addr;\
   }\
   break
+
+#define MOV_ADDR(a, b)     dest_addr = getop_addr(a);\
+  src_addr = getop_addr(b);\
+  break
+
+#define MOVB_IMM(a)    dest_addr = getop_addr(a);\
+    src_byte = getop(0);\
+    dst = getptr(dest_addr++);\
+    *dst = src_byte
+
+#define MOVW_IMM(a)    MOVB_IMM(a);\
+    src_byte = getop(0);\
+    dst = getptr(dest_addr);\
+    *dst = src_byte
+
+void set_status(char res, unsigned char accum, unsigned char operand, unsigned char flags) {
+  cc &= (~flags);
+  if ((flags & 0x08) && res & MSB_SET) {
+    cc |= 0x08;
+  }
+  if ((flags & 0x04) && !res) {
+    cc |= 0x04;
+  }
+  if ((flags & 0x02) && (((accum & MSB_SET) && !(operand & MSB_SET) && !(res & MSB_SET))
+			 || (!(accum & MSB_SET) && (operand & MSB_SET) && (res & MSB_SET)))) {
+    cc |= 0x02;
+  }
+  if (flags & 0x01 && ((!(accum & MSB_SET) && (operand & MSB_SET))
+		       || ((operand & MSB_SET) && (res & MSB_SET))
+		       || ((res & MSB_SET) && !(accum & MSB_SET)))) {
+    cc |= 0x01;
+  }
+}
 
 unsigned short getop_addr(unsigned char opcode) {
   unsigned short *reg, indir_addr, addr;
@@ -420,7 +455,7 @@ void pshpul(unsigned char opcode) {
       break;
     case 13:
       addr = stackptr(sp);
-      pc = *addr;
+      pc = *((unsigned short*)addr);
       sp++;
       sp++;
       break;
@@ -624,17 +659,25 @@ void clr(unsigned char opcode) {
 }
 
 void staa(unsigned char opcode) {
+  unsigned short addr;
+  unsigned char* mem;
   if (!(opcode & LAST_QUARTER)) {
     /* Call with extended */
   }
-  ACCUM_A = getop(opcode);
+  addr = getop_addr(opcode);
+  mem = getptr(addr);
+  *mem = ACCUM_A;
 }
 
 void stab(unsigned char opcode) {
+  unsigned short addr;
+  unsigned char* mem;
   if (!(opcode & LAST_QUARTER)) {
     /* Call with indirect */
   }
-  ACCUM_B = getop(opcode);
+  addr = getop_addr(opcode);
+  mem = getptr(addr);
+  *mem = ACCUM_B;
 }
 
 void std(unsigned char opcode) {
@@ -643,7 +686,7 @@ void std(unsigned char opcode) {
   if (!(opcode & LAST_QUARTER)) {
     bset(1);
   }
-  addr = getop_short(opcode);
+  addr = getop_addr(opcode);
   mem = (unsigned short*)getptr(addr);
   *mem = d.reg;
 }
@@ -654,7 +697,7 @@ void sty(unsigned char opcode) {
   if (!(opcode & LAST_QUARTER)) {
     bclr(1);
   }
-  addr = getop_short(opcode);
+  addr = getop_addr(opcode);
   mem = (unsigned short*)getptr(addr);
   *mem = y;
 }
@@ -665,7 +708,7 @@ void stx(unsigned char opcode) {
   if (!(opcode & LAST_QUARTER)) {
     brset(1);
   }
-  addr = getop_short(opcode);
+  addr = getop_addr(opcode);
   mem = (unsigned short*)getptr(addr);
   *mem = x;
 }
@@ -676,7 +719,7 @@ void sts(unsigned char opcode) {
   if (!(opcode & LAST_QUARTER)) {
     brclr(1);
   }
-  addr = getop_short(opcode);
+  addr = getop_addr(opcode);
   mem = (unsigned short*)getptr(addr);
   *mem = sp;
 }
@@ -697,27 +740,7 @@ void sub_accum(unsigned char opcode) {
     return;
   }
   res = *accum - operand;
-  if (res < 0) {
-    cc |= 0x08;
-  } else {
-    cc &= 0xF7;
-  }
-  if (!res) {
-    cc |= 0x04;
-  } else {
-    cc &= 0xFC;
-  }
-  if ((*accum & MSB_SET    &&   operand & MSB_SET  && res > 0) ||
-      (!(*accum & MSB_SET) && !(operand & MSB_SET) && res < 0)) {
-    cc |= 0x02;
-  } else {
-    cc &= 0xFD;
-  }
-  if (((unsigned char)res) < *accum) {
-    cc |= 0x01;
-  } else {
-    cc &= 0xFE;
-  }
+  set_status(res, *accum, operand, 0x0F);
   *accum = res;
 }
 
@@ -736,27 +759,7 @@ void cmp_accum(unsigned char opcode) {
     return;
   }
   res = *accum - operand;
-  if (res < 0) {
-    cc |= 0x08;
-  } else {
-    cc &= 0xF7;
-  }
-  if (!res) {
-    cc |= 0x04;
-  } else {
-    cc &= 0xFC;
-  }
-  if ((*accum & MSB_SET    &&   operand & MSB_SET  && res > 0) ||
-      (!(*accum & MSB_SET) && !(operand & MSB_SET) && res < 0)) {
-    cc |= 0x02;
-  } else {
-    cc &= 0xFD;
-  }
-  if (((unsigned char)res) < *accum) {
-    cc |= 0x01;
-  } else {
-    cc &= 0xFE;
-  }
+  set_status(res, *accum, operand, 0x0F);
 }
 
 void sbc_accum(unsigned char opcode) {
@@ -849,7 +852,8 @@ void clr_tst_accum(unsigned char opcode) {
   if (opcode & SECOND_BIT) {
     if (opcode & THIRD_BIT) {
       operand = getop(opcode);
-      /* set flags register per operand value */
+      set_status(operand, operand, 0, 0x0C);
+      cc &= 0xFC;
     } else {
       if (opcode & FIRST_BIT) {
 	operand = readbyte(pc++);
@@ -1048,7 +1052,8 @@ void clr_tst_accum(unsigned char opcode) {
       accum = &ACCUM_A;
     }
     if (opcode & FIRST_BIT) {
-      /* set flags register per *accum value */
+      set_status(*accum, *accum, 0, 0x0C);
+      cc &= 0xFC;
     } else {
       *accum = 0;
     }
@@ -1130,8 +1135,7 @@ void cp_ld_d(unsigned char opcode) {
   unsigned short operand = getop_short(opcode & LAST_QUARTER);
   switch (opcode & THIRD_QUARTER) {
   case 8:
-    /* flag register for cmp */
-    /* d.reg - operand */
+    set_status(d.reg - operand, d.reg, operand, 0x0F);
     break;
   case 12:
     d.reg = operand;
@@ -1145,8 +1149,7 @@ void cp_ld_y(unsigned char opcode) {
   unsigned short operand = getop_short(opcode & LAST_QUARTER);
   switch (opcode & THIRD_QUARTER) {
   case 8:
-    /* flag register for cmp */
-    /* y - operand */
+    set_status(y - operand, y, operand, 0x0F);
     break;
   case 12:
     y = operand;
@@ -1160,8 +1163,7 @@ void cp_ld_x(unsigned char opcode) {
   unsigned short operand = getop_short(opcode & LAST_QUARTER);
   switch (opcode & THIRD_QUARTER) {
   case 8:
-    /* flag register for cmp */
-    /* x - operand */
+    set_status(x - operand, x, operand, 0x0F);
     break;
   case 12:
     x = operand;
@@ -1175,8 +1177,7 @@ void cp_ld_sp(unsigned char opcode) {
   unsigned short operand = getop_short(opcode & LAST_QUARTER);
   switch (opcode & THIRD_QUARTER) {
   case 8:
-    /* flag register for cmp */
-    /* sp - operand */
+    set_status(sp - operand, sp, operand, 0x0F);
     break;
   case 12:
     sp = operand;
@@ -1191,60 +1192,42 @@ void mov(unsigned char opcode) {
   unsigned char *dst, src_byte;
   switch (opcode) {
   case 0:
-    dest_addr = getop_addr(2);
-    src_byte = getop(0);
-    dst = getptr(dest_addr++);
-    *dst = src_byte;
-    src_byte = getop(0);
-    dst = getptr(dest_addr);
-    *dst = src_byte;
+    MOVW_IMM(2);
     return;
   case 1:
   case 9:
-    dest_addr = getop_addr(2);
-    src_addr = getop_addr(3);
-    break;
+    MOV_ADDR(2, 3);
   case 2:
   case 10:
-    dest_addr = getop_addr(2);
-    src_addr = getop_addr(2);
-    break;
+    MOV_ADDR(2, 2);
   case 3:
-    dest_addr = getop_addr(3);
-    src_byte = getop(0);
-    dst = getptr(dest_addr++);
-    *dst = src_byte;
-    src_byte = getop(0);
-    dst = getptr(dest_addr);
-    *dst = src_byte;
+    MOVW_IMM(3);
     return;
   case 4:
   case 12:
-    dest_addr = getop_addr(3);
-    src_addr = getop_addr(3);
-    break;
+    MOV_ADDR(3, 3);
   case 5:
   case 13:
-    dest_addr = getop_addr(3);
-    src_addr = getop_addr(2);
-    break;
+    MOV_ADDR(3, 2);
   case 8:
-    dest_addr = getop_addr(2);
-    src_byte = getop(0);
-    dst = getptr(dest_addr);
-    *dst = src_byte;
+    MOVB_IMM(2);
     return;
   case 11:
-    dest_addr = getop_addr(3);
-    src_byte = getop(0);
-    dst = getptr(dest_addr);
-    *dst = src_byte;
+    MOVB_IMM(3);
     return;
   case 14:
     ACCUM_B = ACCUM_A;
+    src_byte = FLAG_C;
+    set_status(ACCUM_B, ACCUM_B, 0, 0x0C);
+    cc &= 0xFC;
+    cc |= src_byte;
     return;
   case 15:
     ACCUM_A = ACCUM_B;
+    src_byte = FLAG_C;
+    set_status(ACCUM_A, ACCUM_A, 0, 0x0C);
+    cc &= 0xFC;
+    cc |= src_byte;
     return;
   default:
     printf("Unimplemented opcode in MOV column.");

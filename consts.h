@@ -1,8 +1,8 @@
 #ifndef CONSTANTS
 #define CONSTANTS
 
-#define ACCUM_A d.accum[0]
-#define ACCUM_B d.accum[1]
+#define ACCUM_A d.accum[1]
+#define ACCUM_B d.accum[0]
 
 #define MSB_SET 0x80
 #define SMSB_SET 0x40

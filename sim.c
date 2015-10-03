@@ -88,7 +88,7 @@ void execute(void) {
 	break;
       case 0x11:
 	i = y;
-	i = i << 8;
+	i = i << 16;
 	i += d.reg;
 	y = i/x;
 	d.reg = i%x;
