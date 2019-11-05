@@ -12,3 +12,6 @@ list.o: list.c list.h
 
 array.o: array.c array.h
 	$(CC) -fPIC $(CFLAGS) -c array.c
+
+clean:
+	rm -f *~ *.o sim
