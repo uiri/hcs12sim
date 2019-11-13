@@ -49,21 +49,31 @@ extern unsigned char ppage;
     dst = getptr(dest_addr);\
     *dst = src_byte
 
-void set_status(char res, unsigned char accum, unsigned char operand, unsigned char flags) {
-  cc &= (~flags);
-  if ((flags & 0x08) && res & MSB_SET) {
+/* Set the condition code flags according to the result of an ALU operation.
+ * @arg res:     Result value. If 8-bit, must be shifted up to bits 8-15 by caller, with bits 0-7 zeroed.
+ * @arg carries: Intermediate carry (or borrow) bits. If 17-bit, bits 8-16 must be shifted down to bits 0-8 by caller.
+ * @arg flags:   Mask of bits in CCR to update.
+ */
+void set_status(signed short res, unsigned short carries, unsigned char flags) {
+  cc &= ~flags;
+  if ((flags & 0x20) && (carries & 0x10)) {
+    /* Half-carry */
+    cc |= 0x20;
+  }
+  if ((flags & 0x08) && (res & 0x8000)) {
+    /* Negative */
     cc |= 0x08;
   }
-  if ((flags & 0x04) && !res) {
+  if ((flags & 0x04) && (res == 0)) {
+    /* Zero */
     cc |= 0x04;
   }
-  if ((flags & 0x02) && (((accum & MSB_SET) && !(operand & MSB_SET) && !(res & MSB_SET))
-			 || (!(accum & MSB_SET) && (operand & MSB_SET) && (res & MSB_SET)))) {
+  if ((flags & 0x02) && ((carries & 0x100) ^ ((carries << 1) & 0x100))) {
+    /* signed oVerflow */
     cc |= 0x02;
   }
-  if (flags & 0x01 && ((!(accum & MSB_SET) && (operand & MSB_SET))
-		       || ((operand & MSB_SET) && (res & MSB_SET))
-		       || ((res & MSB_SET) && !(accum & MSB_SET)))) {
+  if ((flags & 0x01) && (carries & 0x100)) {
+    /* unsigned Carry or borrow */
     cc |= 0x01;
   }
 }
@@ -233,17 +243,17 @@ short branch(unsigned char opcode) {
   case 11:
     if (!FLAG_N) return 0;
     break;
-  case 12:
-    if (!(FLAG_N^FLAG_V)) return 0;
-    break;
-  case 13:
+  case 12: /* GE */
     if (FLAG_N^FLAG_V) return 0;
     break;
-  case 14:
-    if (!(FLAG_Z | (FLAG_N^FLAG_V))) return 0;
+  case 13: /* LT */
+    if (!(FLAG_N^FLAG_V)) return 0;
     break;
-  case 15:
+  case 14: /* GT */
     if (FLAG_Z | (FLAG_N^FLAG_V)) return 0;
+    break;
+  case 15: /* LE */
+    if (!(FLAG_Z | (FLAG_N^FLAG_V))) return 0;
     break;
   default:
     return 0;
@@ -345,21 +355,25 @@ void lea(unsigned char opcode) {
 }
 
 void bset(unsigned char addr_type) {
-  unsigned char *mem, mask;
+  unsigned char *mem, mask, res;
   unsigned short addr;
   addr = getop_addr(addr_type);
   mem = getptr(addr);
   mask = readbyte(pc++);
-  *mem = *mem | mask;
+  res = *mem | mask;
+  set_status(res << 8, 0, 0x0E);
+  *mem = res;
 }
 
 void bclr(unsigned char addr_type) {
-  unsigned char *mem, mask;
+  unsigned char *mem, mask, res;
   unsigned short addr;
   addr = getop_addr(addr_type);
   mem = getptr(addr);
   mask = readbyte(pc++);
-  *mem = *mem & (~mask);
+  res = *mem & ~mask;
+  set_status(res << 8, 0, 0x0E);
+  *mem = res;
 }
 
 void brset(unsigned char addr_type) {
@@ -493,6 +507,7 @@ void pshpul(unsigned char opcode) {
 void neg(unsigned char opcode) {
   unsigned short addr;
   unsigned char *accum;
+  unsigned short res;
   switch (opcode & LAST_QUARTER) {
   case 0:
     accum = &ACCUM_A;
@@ -505,7 +520,9 @@ void neg(unsigned char opcode) {
     accum = getptr(addr);
     break;
   }
-  *accum = (~*accum) + 1;
+  res = -*accum;
+  set_status(res << 8, res ^ *accum, 0x0F);
+  *accum = res;
 }
 
 void com(unsigned char opcode) {
@@ -524,11 +541,13 @@ void com(unsigned char opcode) {
     break;
   }
   *accum = ~*accum;
+  set_status(*accum << 8, -1, 0x0F);
 }
 
 void inc(unsigned char opcode) {
   unsigned short addr;
   unsigned char *accum;
+  unsigned short res;
   switch (opcode & LAST_QUARTER) {
   case 0:
     accum = &ACCUM_A;
@@ -541,12 +560,15 @@ void inc(unsigned char opcode) {
     accum = getptr(addr);
     break;
   }
-  *accum += 1;
+  res = *accum + 1;
+  set_status(res << 8, res ^ *accum, 0x0E);
+  *accum = res;
 }
 
 void dec(unsigned char opcode) {
   unsigned short addr;
   unsigned char *accum;
+  unsigned short res;
   switch (opcode & LAST_QUARTER) {
   case 0:
     accum = &ACCUM_A;
@@ -559,12 +581,15 @@ void dec(unsigned char opcode) {
     accum = getptr(addr);
     break;
   }
-  *accum -= 1;
+  res = *accum - 1;
+  set_status(res << 8, res ^ *accum, 0x0E);
+  *accum = res;
 }
 
 void lsr(unsigned char opcode) {
   unsigned short addr;
   unsigned char *accum;
+  unsigned short res;
   switch (opcode & LAST_QUARTER) {
   case 0:
     accum = &ACCUM_A;
@@ -577,12 +602,15 @@ void lsr(unsigned char opcode) {
     accum = getptr(addr);
     break;
   }
-  *accum = *accum >> 1;
+  res = (*accum >> 1) | (*accum << 8);
+  set_status(res << 8, res, 0x0F);
+  *accum = res;
 }
 
 void rol(unsigned char opcode) {
   unsigned short addr;
-  unsigned char *accum, bit;
+  unsigned char *accum;
+  unsigned short res;
   switch (opcode & LAST_QUARTER) {
   case 0:
     accum = &ACCUM_A;
@@ -595,16 +623,15 @@ void rol(unsigned char opcode) {
     accum = getptr(addr);
     break;
   }
-  bit = FLAG_C;
-  if (*accum & 0x80) {
-    cc = cc | 0x01;
-  }
-  *accum = (*accum << 1) + bit;
+  res = (*accum << 1) | FLAG_C;
+  set_status(res << 8, res, 0x0F);
+  *accum = res;
 }
 
 void ror(unsigned char opcode) {
   unsigned short addr;
-  unsigned char *accum, bit;
+  unsigned char *accum;
+  unsigned short res;
   switch (opcode & LAST_QUARTER) {
   case 0:
     accum = &ACCUM_A;
@@ -617,16 +644,15 @@ void ror(unsigned char opcode) {
     accum = getptr(addr);
     break;
   }
-  bit = FLAG_C;
-  if (*accum & 0x01) {
-    cc = cc | 0x01;
-  }
-  *accum = (*accum >> 1) + bit;
+  res = (*accum >> 1) | (FLAG_C << 7) | (*accum << 8);
+  set_status(res << 8, res, 0x0F);
+  *accum = res;
 }
 
 void asr(unsigned char opcode) {
   unsigned short addr;
   unsigned char *accum;
+  unsigned short res;
   switch (opcode & LAST_QUARTER) {
   case 0:
     accum = &ACCUM_A;
@@ -639,12 +665,15 @@ void asr(unsigned char opcode) {
     accum = getptr(addr);
     break;
   }
-  *accum = *((signed char*)accum) >> 1;
+  res = (*accum >> 1) | (*accum & 0x80) | (*accum << 8);
+  set_status(res << 8, res, 0x0F);
+  *accum = res;
 }
 
 void asl(unsigned char opcode) {
   unsigned short addr;
   unsigned char *accum;
+  unsigned short res;
   switch (opcode & LAST_QUARTER) {
   case 0:
     accum = &ACCUM_A;
@@ -657,20 +686,28 @@ void asl(unsigned char opcode) {
     accum = getptr(addr);
     break;
   }
-  *accum = *accum << 1;
+  res = *accum << 1;
+  set_status(res << 8, res, 0x0F);
+  *accum = res;
 }
 
 void clr(unsigned char opcode) {
   unsigned short addr;
   unsigned char *accum;
+  uint32_t res;
   switch (opcode & LAST_QUARTER) {
-  case 0:
-    d.reg = d.reg >> 1;
+  case 0: /* LSRD */
+    res = (d.reg >> 1) | (d.reg << 16);
+    set_status(res, res >> 8, 0x0F);
+    d.reg = res;
     break;
-  case 1:
-    d.reg = d.reg << 1;
+  case 1: /* ASLD */
+    res = d.reg << 1;
+    set_status(res, res >> 8, 0x0F);
+    d.reg = res;
     break;
   default:
+    set_status(0, 0, 0x0F);
     addr = getop_addr(opcode);
     accum = getptr(addr);
     *accum = 0;
@@ -701,6 +738,7 @@ void staa(unsigned char opcode) {
   }
   addr = getop_addr(opcode);
   mem = getptr(addr);
+  set_status(ACCUM_A << 8, 0, 0x0E);
   *mem = ACCUM_A;
 }
 
@@ -713,6 +751,7 @@ void stab(unsigned char opcode) {
   }
   addr = getop_addr(opcode);
   mem = getptr(addr);
+  set_status(ACCUM_B << 8, 0, 0x0E);
   *mem = ACCUM_B;
 }
 
@@ -724,6 +763,7 @@ void std(unsigned char opcode) {
   }
   addr = getop_addr(opcode);
   mem = (unsigned short*)getptr(addr);
+  set_status(d.reg, 0, 0x0E);
   *mem = htons(d.reg);
 }
 
@@ -735,6 +775,7 @@ void sty(unsigned char opcode) {
   }
   addr = getop_addr(opcode);
   mem = (unsigned short*)getptr(addr);
+  set_status(y, 0, 0x0E);
   *mem = htons(y);
 }
 
@@ -746,6 +787,7 @@ void stx(unsigned char opcode) {
   }
   addr = getop_addr(opcode);
   mem = (unsigned short*)getptr(addr);
+  set_status(x, 0, 0x0E);
   *mem = htons(x);
 }
 
@@ -757,6 +799,7 @@ void sts(unsigned char opcode) {
   }
   addr = getop_addr(opcode);
   mem = (unsigned short*)getptr(addr);
+  set_status(sp, 0, 0x0E);
   *mem = htons(sp);
 }
 
@@ -764,7 +807,7 @@ void sts(unsigned char opcode) {
 void sub_accum(unsigned char opcode) {
   unsigned char operand = getop(opcode & LAST_QUARTER);
   unsigned char *accum;
-  char res;
+  unsigned short res;
   switch (opcode & THIRD_QUARTER) {
   case 8:
     accum = &ACCUM_A;
@@ -776,14 +819,14 @@ void sub_accum(unsigned char opcode) {
     return;
   }
   res = *accum - operand;
-  set_status(res, *accum, operand, 0x0F);
+  set_status(res << 8, res ^ *accum ^ operand, 0x0F);
   *accum = res;
 }
 
 void cmp_accum(unsigned char opcode) {
   unsigned char operand = getop(opcode & LAST_QUARTER);
   unsigned char *accum;
-  char res;
+  unsigned short res;
   switch (opcode & THIRD_QUARTER) {
   case 8:
     accum = &ACCUM_A;
@@ -795,12 +838,13 @@ void cmp_accum(unsigned char opcode) {
     return;
   }
   res = *accum - operand;
-  set_status(res, *accum, operand, 0x0F);
+  set_status(res << 8, res ^ *accum ^ operand, 0x0F);
 }
 
 void sbc_accum(unsigned char opcode) {
   unsigned char operand = getop(opcode & LAST_QUARTER);
   unsigned char *accum;
+  unsigned short res;
   switch (opcode & THIRD_QUARTER) {
   case 8:
     accum = &ACCUM_A;
@@ -811,21 +855,26 @@ void sbc_accum(unsigned char opcode) {
   default:
     return;
   }
-  if (FLAG_C) {
-    operand++;
-  }
-  /* flag registers */
-  *accum -= operand;
+  res = *accum - operand - FLAG_C;
+  set_status(res << 8, res ^ *accum ^ operand, 0x0F);
+  *accum = res;
 }
 
 void add_d(unsigned char opcode) {
   unsigned short operand = getop_short(opcode & LAST_QUARTER);
+  uint32_t res;
   switch (opcode & THIRD_QUARTER) {
   case 8:
     /* SUB */
+    res = d.reg - operand;
+    set_status(res, (res ^ d.reg ^ operand) >> 8, 0x0F);
+    d.reg = res;
     break;
   case 12:
     /* ADD */
+    res = d.reg + operand;
+    set_status(res, (res ^ d.reg ^ operand) >> 8, 0x0F);
+    d.reg = res;
     break;
   default:
     return;
@@ -845,8 +894,8 @@ void and_accum(unsigned char opcode) {
   default:
     return;
   }
-  /* flag registers */
   *accum = operand & *accum;
+  set_status(*accum << 8, 0, 0x0E);
 }
 
 void bit_accum(unsigned char opcode) {
@@ -862,7 +911,7 @@ void bit_accum(unsigned char opcode) {
   default:
     return;
   }
-  /* flag registers for bitwise AND */
+  set_status((*accum & operand) << 8, 0, 0x0E);
 }
 
 void load_accum(unsigned char opcode) {
@@ -878,6 +927,7 @@ void load_accum(unsigned char opcode) {
   default:
     return;
   }
+  set_status(operand << 8, 0, 0x0E);
   *accum = operand;
 }
 
@@ -886,12 +936,11 @@ void clr_tst_accum(unsigned char opcode) {
   unsigned char* accum = 0;
   unsigned char operand, c;
   if (opcode & SECOND_BIT) {
-    if (opcode & THIRD_BIT) {
+    if (opcode & THIRD_BIT) { /* TST */
       operand = getop(opcode);
-      set_status(operand, operand, 0, 0x0C);
-      cc &= 0xFC;
+      set_status(operand << 8, 0, 0x0F);
     } else {
-      if (opcode & FIRST_BIT) {
+      if (opcode & FIRST_BIT) { /* TFR/EXG */
 	operand = readbyte(pc++);
 	switch (operand & SECOND_HALF) {
 	case 0:
@@ -1087,10 +1136,10 @@ void clr_tst_accum(unsigned char opcode) {
     } else {
       accum = &ACCUM_A;
     }
-    if (opcode & FIRST_BIT) {
-      set_status(*accum, *accum, 0, 0x0C);
-      cc &= 0xFC;
-    } else {
+    if (opcode & FIRST_BIT) { /* TSTA/TSTB */
+      set_status(*accum << 8, 0, 0x0F);
+    } else { /* CLRA/CLRB */
+      set_status(0, 0, 0x0F);
       *accum = 0;
     }
   }
@@ -1109,13 +1158,14 @@ void xor_accum(unsigned char opcode) {
   default:
     return;
   }
-  /* flag registers */
   *accum = operand ^ *accum;
+  set_status(*accum << 8, 0, 0x0E);
 }
 
 void adc_accum(unsigned char opcode) {
   unsigned char operand = getop(opcode & LAST_QUARTER);
   unsigned char *accum;
+  unsigned short res;
   switch (opcode & THIRD_QUARTER) {
   case 8:
     accum = &ACCUM_A;
@@ -1126,11 +1176,9 @@ void adc_accum(unsigned char opcode) {
   default:
     return;
   }
-  if (FLAG_C) {
-    operand++;
-  }
-  /* flag registers */
-  *accum += operand;
+  res = *accum + operand + FLAG_C;
+  set_status(res << 8, res ^ *accum ^ operand, 0x2F);
+  *accum = res;
 }
 
 void or_accum(unsigned char opcode) {
@@ -1146,13 +1194,14 @@ void or_accum(unsigned char opcode) {
   default:
     return;
   }
-  /* flag registers */
   *accum = operand | *accum;
+  set_status(*accum << 8, 0, 0x0E);
 }
 
 void add_accum(unsigned char opcode) {
   unsigned char operand = getop(opcode & LAST_QUARTER);
   unsigned char *accum;
+  unsigned short res;
   switch (opcode & THIRD_QUARTER) {
   case 8:
     accum = &ACCUM_A;
@@ -1163,17 +1212,21 @@ void add_accum(unsigned char opcode) {
   default:
     return;
   }
-  /* flag registers */
-  *accum += operand;
+  res = *accum + operand;
+  set_status(res << 8, res ^ *accum ^ operand, 0x2F);
+  *accum = res;
 }
 
 void cp_ld_d(unsigned char opcode) {
   unsigned short operand = getop_short(opcode & LAST_QUARTER);
+  uint32_t res;
   switch (opcode & THIRD_QUARTER) {
-  case 8:
-    set_status(d.reg - operand, d.reg, operand, 0x0F);
+  case 8: /* CPD */
+    res = d.reg - operand;
+    set_status(res, (res ^ d.reg ^ operand) >> 8, 0x0F);
     break;
-  case 12:
+  case 12: /* LDD */
+    set_status(operand, 0, 0x0E);
     d.reg = operand;
     break;
   default:
@@ -1183,11 +1236,14 @@ void cp_ld_d(unsigned char opcode) {
 
 void cp_ld_y(unsigned char opcode) {
   unsigned short operand = getop_short(opcode & LAST_QUARTER);
+  uint32_t res;
   switch (opcode & THIRD_QUARTER) {
-  case 8:
-    set_status(y - operand, y, operand, 0x0F);
+  case 8: /* CPY */
+    res = y - operand;
+    set_status(res, (res ^ y ^ operand) >> 8, 0x0F);
     break;
-  case 12:
+  case 12: /* LDY */
+    set_status(operand, 0, 0x0E);
     y = operand;
     break;
   default:
@@ -1197,11 +1253,14 @@ void cp_ld_y(unsigned char opcode) {
 
 void cp_ld_x(unsigned char opcode) {
   unsigned short operand = getop_short(opcode & LAST_QUARTER);
+  uint32_t res;
   switch (opcode & THIRD_QUARTER) {
-  case 8:
-    set_status(x - operand, x, operand, 0x0F);
+  case 8: /* CPX */
+    res = x - operand;
+    set_status(res, (res ^ x ^ operand) >> 8, 0x0F);
     break;
-  case 12:
+  case 12: /* LDX */
+    set_status(operand, 0, 0x0E);
     x = operand;
     break;
   default:
@@ -1211,11 +1270,14 @@ void cp_ld_x(unsigned char opcode) {
 
 void cp_ld_sp(unsigned char opcode) {
   unsigned short operand = getop_short(opcode & LAST_QUARTER);
+  uint32_t res;
   switch (opcode & THIRD_QUARTER) {
-  case 8:
-    set_status(sp - operand, sp, operand, 0x0F);
+  case 8: /* CPS */
+    res = sp - operand;
+    set_status(res, (res ^ sp ^ operand) >> 8, 0x0F);
     break;
-  case 12:
+  case 12: /* LDS */
+    set_status(operand, 0, 0x0E);
     sp = operand;
     break;
   default:
@@ -1251,19 +1313,13 @@ void mov(unsigned char opcode) {
   case 11:
     MOVB_IMM(3);
     return;
-  case 14:
+  case 14: /* TAB */
     ACCUM_B = ACCUM_A;
-    src_byte = FLAG_C;
-    set_status(ACCUM_B, ACCUM_B, 0, 0x0C);
-    cc &= 0xFC;
-    cc |= src_byte;
+    set_status(ACCUM_B << 8, 0, 0x0E);
     return;
-  case 15:
+  case 15: /* TBA */
     ACCUM_A = ACCUM_B;
-    src_byte = FLAG_C;
-    set_status(ACCUM_A, ACCUM_A, 0, 0x0C);
-    cc &= 0xFC;
-    cc |= src_byte;
+    set_status(ACCUM_A << 8, 0, 0x0E);
     return;
   default:
     printf("Unimplemented opcode in MOV column.");

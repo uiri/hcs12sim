@@ -11,6 +11,8 @@
 #include <arpa/inet.h>
 #endif
 
+void set_status(signed short res, unsigned short carries, unsigned char flags);
+
 union reg_accum d;
 unsigned short pc = 0, x = 0, y = 0, sp = 0, cc = 0;
 unsigned char ppage;
@@ -64,9 +66,11 @@ void execute(void) {
 	break;
       case 0x02:
 	y++;
+	set_status(y, 0, 0x04);
 	break;
       case 0x03:
 	y--;
+	set_status(y, 0, 0x04);
 	break;
       case 0x05:
       case 0x06:
@@ -77,9 +81,11 @@ void execute(void) {
 	break;
       case 0x08:
 	x++;
+	set_status(x, 0, 0x04);
 	break;
       case 0x09:
 	x--;
+	set_status(x, 0, 0x04);
 	break;
       case 0x0A:
 	mem = stackptr(sp);
