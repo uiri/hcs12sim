@@ -1321,6 +1321,26 @@ void mov(unsigned char opcode) {
     ACCUM_A = ACCUM_B;
     set_status(ACCUM_A << 8, 0, 0x0E);
     return;
+  case 6: /* ABA */
+  {
+    unsigned short res = ACCUM_A + ACCUM_B;
+    set_status(res << 8, res ^ ACCUM_A ^ ACCUM_B, 0x2F);
+    ACCUM_A = res;
+    return;
+  }
+  case 7: /* DAA */
+  {
+    unsigned char correction = 0;
+    unsigned short res;
+    if (FLAG_H || ((ACCUM_A & 0x0F) > 0x09))
+      correction |= 0x06;
+    if (FLAG_C || (ACCUM_A > 0x99))
+      correction |= 0x60;
+    res = ACCUM_A + correction;
+    set_status(res << 8, correction << 2, 0x0F);
+    ACCUM_A = res;
+    return;
+  }
   default:
     printf("Unimplemented opcode in MOV column.");
     return;
