@@ -264,10 +264,66 @@ short branch(unsigned char opcode) {
 void divmul(unsigned char opcode) {
   unsigned short denominator;
   switch (opcode) {
-  case 0:
-    denominator = x;
-    x = (unsigned short)(d.reg / denominator);
-    d.reg = (unsigned short)(d.reg % denominator);
+  case 0: /* IDIV */
+    if (x == 0) {
+      cc |= 0x01;
+      x = 0xFFFF;
+    } else {
+      denominator = x;
+      x = d.reg / denominator;
+      d.reg %= denominator;
+      set_status(x, 0, 0x07);
+    }
+    break;
+  case 1: /* FDIV */
+    if (x == 0) {
+      cc |= 0x01;
+      x = 0xFFFF;
+    } else {
+      uint32_t numerator = (uint32_t) d.reg << 16;
+      if (x <= d.reg)
+        cc |= 0x02;
+      denominator = x;
+      x = numerator / denominator;
+      d.reg = numerator % denominator;
+      set_status(x, 0, 0x05);
+    }
+    break;
+  case 2: /* EMACS */
+  {
+    unsigned short addr;
+    signed short arg1, arg2;
+    uint32_t i, *pm, m, res;
+    addr = readbyte(pc++) << 8;
+    addr += readbyte(pc++);
+    pm = (uint32_t *) getptr(addr);
+    arg1 = ntohs(*(unsigned short *) getptr(x));
+    arg2 = ntohs(*(unsigned short *) getptr(y));
+    i = arg1 * arg2;
+    m = ntohl(*pm);
+    res = i + m;
+    *pm = htonl(res);
+    set_status(res | (res >> 8) | (res >> 16), res >> 7, 0x0D);
+    /* V looks at 32-bit overflow, unlike C which looks at 16-bit carry, so calculate it separately */
+    cc &= ~0x02;
+    if (((i & m & ~res) | (~i & ~m & res)) & (1u<<31))
+      cc |= 0x02;
+    break;
+  }
+  case 3: /* EMULS */
+  {
+    uint32_t res = (signed short) d.reg * (signed short) y;
+    y = res >> 16;
+    d.reg = res & 0xFFFFu;
+    set_status(res | (res >> 8) | (res >> 16), res >> 7, 0x0D);
+    break;
+  }
+  case 4: /* EDIVS */
+  case 5: /* IDIVS */
+    /* The CPU12 reference manual is not specific about whether
+     * signed division is truncated, floored or Euclidean
+     * so there's not enough information to implement them
+     */
   default:
     return;
   }

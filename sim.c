@@ -24,7 +24,6 @@ extern void (*branch_clr_set[4])(unsigned char addr_type);
 
 void execute(void) {
   unsigned char c;
-  unsigned int i;
   unsigned char *mem;
   for (;;) {
     c = readbyte(pc++);
@@ -103,19 +102,31 @@ void execute(void) {
 	c = readbyte(pc++);
 	cc = cc & c;
 	break;
-      case 0x11:
-	i = y;
-	i = i << 16;
-	i += d.reg;
-	y = i/x;
-	d.reg = i%x;
+      case 0x11: /* EDIV */
+	if (x == 0) {
+	  cc |= 0x01;
+	} else {
+	  uint32_t numerator = (y << 16) + d.reg;
+	  uint32_t quotient = numerator / x;
+	  y = quotient;
+	  d.reg = numerator % x;
+	  set_status(y, 0, 0x0F);
+	  if (quotient >= 0x80000)
+	    cc |= 0x02;
+	}
 	break;
-      case 0x12:
-	ACCUM_A = ACCUM_A * ACCUM_B;
+      case 0x12: /* MUL */
+	d.reg = ACCUM_A * ACCUM_B;
+	set_status(0, d.reg << 1, 0x01);
 	break;
-      case 0x13:
-	y = d.reg * y;
+      case 0x13: /* EMUL */
+      {
+	uint32_t res = d.reg * y;
+	y = res >> 16;
+	d.reg = res & 0xFFFFu;
+	set_status(res | (res >> 8) | (res >> 16), res >> 7, 0x0D);
 	break;
+      }
       case 0x14:
 	c = readbyte(pc++);
 	cc = cc | c;
