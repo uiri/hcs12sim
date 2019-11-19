@@ -527,15 +527,15 @@ void pshpul(unsigned char opcode) {
       reg = &cc;
     }
     if (opcode & FIRST_BIT) {
-      addr = stackptr(sp);
-      *reg = ntohs(*((unsigned short*)addr));
-      sp++;
-      sp++;
-    } else {
       sp--;
       sp--;
       addr = stackptr(sp);
       *((unsigned short*)addr) = htons(*reg);
+    } else {
+      addr = stackptr(sp);
+      *reg = ntohs(*((unsigned short*)addr));
+      sp++;
+      sp++;
     }
   } else {
     switch (opcode) {
