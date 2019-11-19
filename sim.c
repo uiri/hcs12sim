@@ -42,9 +42,66 @@ void execute(void) {
 	return;
       }
     } else if (c == 0x04) { /* loop instruction */
-      printf("loop\n");
-      c = readbyte(pc++);
-      /* decompose into instruction */
+      unsigned char lb = readbyte(pc++);
+      unsigned char rr = readbyte(pc++);
+      char branch;
+      char invert = !(lb & 0x20); /* 0 if BNE, 1 if BEQ */
+      signed char offset = 0;
+      switch (lb & 0xC0) {
+      case 0x00: /* D */
+	offset = -1;
+	break;
+      case 0x40: /* I */
+	offset = +1;
+	break;
+      case 0x80: /* T */
+	offset = 0;
+	break;
+      default:
+	printf("Unimplemented loop type\n");
+	return;
+      }
+      if (lb & 0x04) {
+	/* 16-bit counter */
+	unsigned short *counter;
+	switch (lb & 3) {
+	case 0:
+	  counter = &d.reg;
+	  break;
+	case 1:
+	  counter = &x;
+	  break;
+	case 2:
+	  counter = &y;
+	  break;
+	default:
+	  counter = &sp;
+	  break;
+	}
+	*counter += offset;
+	branch = invert ^ (*counter != 0);
+      } else {
+	/* 8-bit counter */
+	unsigned char *counter;
+	switch (lb & 3) {
+	case 0:
+	  counter = &ACCUM_A;
+	  break;
+	case 1:
+	  counter = &ACCUM_B;
+	  break;
+	default:
+	  printf("Unimplemented loop counter\n");
+	  return;
+	}
+	*counter += offset;
+	branch = invert ^ (*counter != 0);
+      }
+      if (branch) {
+	pc += rr;
+	if (lb & 0x10)
+	  pc -= 256;
+      }
     } else if (c & MSB_SET) {
       msb_opcode_array[c & SECOND_HALF]((c & FIRST_HALF) >> 4);
     } else if (c & SMSB_SET) {
