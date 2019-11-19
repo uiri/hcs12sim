@@ -5,6 +5,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifdef _WIN32
+#include <winsock.h>
+#else
+#include <arpa/inet.h>
+#endif
+
 union reg_accum d;
 unsigned short pc = 0, x = 0, y = 0, sp = 0, cc = 0;
 unsigned char ppage;
@@ -80,7 +86,7 @@ void execute(void) {
 	ppage = *mem;
 	sp++;
 	mem = stackptr(sp);
-	pc = *((unsigned short*)mem);
+	pc = ntohs(*((unsigned short*)mem));
 	sp++;
 	sp++;
 	break;

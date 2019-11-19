@@ -3,6 +3,12 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#ifdef _WIN32
+#include <winsock.h>
+#else
+#include <arpa/inet.h>
+#endif
+
 extern union reg_accum d;
 extern unsigned short pc, x, y, sp, cc;
 extern unsigned char ppage;
@@ -278,7 +284,7 @@ void bsr() {
   sp--;
   sp--;
   mem = (unsigned short*)stackptr(sp);
-  *mem = pc;
+  *mem = htons(pc);
   pc += c;
 }
 
@@ -315,7 +321,7 @@ void jsr(unsigned char opcode) {
   sp--;
   sp--;
   mem = (unsigned short*)stackptr(sp);
-  *mem = pc;
+  *mem = htons(pc);
   pc = operand;
 }
 
@@ -437,10 +443,10 @@ void pshpul(unsigned char opcode) {
       sp--;
       sp--;
       addr = stackptr(sp);
-      *((unsigned short*)addr) = *reg;
+      *((unsigned short*)addr) = htons(*reg);
     } else {
       addr = stackptr(sp);
-      *reg = *((unsigned short*)addr);
+      *reg = ntohs(*((unsigned short*)addr));
       sp++;
       sp++;
     }
@@ -452,14 +458,14 @@ void pshpul(unsigned char opcode) {
     }
     if (opcode & FIRST_BIT) {
       addr = stackptr(sp);
-      *reg = *((unsigned short*)addr);
+      *reg = ntohs(*((unsigned short*)addr));
       sp++;
       sp++;
     } else {
       sp--;
       sp--;
       addr = stackptr(sp);
-      *((unsigned short*)addr) = *reg;
+      *((unsigned short*)addr) = htons(*reg);
     }
   } else {
     switch (opcode) {
@@ -468,7 +474,7 @@ void pshpul(unsigned char opcode) {
       break;
     case 13:
       addr = stackptr(sp);
-      pc = *((unsigned short*)addr);
+      pc = ntohs(*((unsigned short*)addr));
       sp++;
       sp++;
       break;
@@ -679,10 +685,9 @@ void call(unsigned char opcode) {
   sp--;
   sp--;
   mem = (unsigned short*)stackptr(sp);
-  *mem = pc;
+  *mem = htons(pc);
   sp--;
-  mem = (unsigned short*)stackptr(sp);
-  *mem = ppage;
+  *stackptr(sp) = ppage;
   ppage = newpage;
   pc = operand;
 }
@@ -719,7 +724,7 @@ void std(unsigned char opcode) {
   }
   addr = getop_addr(opcode);
   mem = (unsigned short*)getptr(addr);
-  *mem = d.reg;
+  *mem = htons(d.reg);
 }
 
 void sty(unsigned char opcode) {
@@ -730,7 +735,7 @@ void sty(unsigned char opcode) {
   }
   addr = getop_addr(opcode);
   mem = (unsigned short*)getptr(addr);
-  *mem = y;
+  *mem = htons(y);
 }
 
 void stx(unsigned char opcode) {
@@ -741,7 +746,7 @@ void stx(unsigned char opcode) {
   }
   addr = getop_addr(opcode);
   mem = (unsigned short*)getptr(addr);
-  *mem = x;
+  *mem = htons(x);
 }
 
 void sts(unsigned char opcode) {
@@ -752,7 +757,7 @@ void sts(unsigned char opcode) {
   }
   addr = getop_addr(opcode);
   mem = (unsigned short*)getptr(addr);
-  *mem = sp;
+  *mem = htons(sp);
 }
 
 
