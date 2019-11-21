@@ -340,7 +340,7 @@ void jmp(unsigned char opcode) {
   default:
     return;
   }
-  pc = getop_short(opcode);
+  pc = getop_addr(opcode);
 }
 
 void bsr() {
