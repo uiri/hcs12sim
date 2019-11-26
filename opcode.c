@@ -35,19 +35,9 @@ extern unsigned char ppage;
   }\
   break
 
-#define MOV_ADDR(a, b)     dest_addr = getop_addr(a);\
-  src_addr = getop_addr(b);\
+#define MOV_ADDR(sd1, a, sd2, b)     sd1##_addr = getop_addr(a);\
+  sd2##_addr = getop_addr(b);\
   break
-
-#define MOVB_IMM(a)    dest_addr = getop_addr(a);\
-    src_byte = getop(0);\
-    dst = getptr(dest_addr++);\
-    *dst = src_byte
-
-#define MOVW_IMM(a)    MOVB_IMM(a);\
-    src_byte = getop(0);\
-    dst = getptr(dest_addr);\
-    *dst = src_byte
 
 /* Set the condition code flags according to the result of an ALU operation.
  * @arg res:     Result value. If 8-bit, must be shifted up to bits 8-15 by caller, with bits 0-7 zeroed.
@@ -1342,32 +1332,46 @@ void cp_ld_sp(unsigned char opcode) {
 }
 
 void mov(unsigned char opcode) {
-  unsigned short src_addr, dest_addr;
+  unsigned short src_addr, dest_addr, src_word;
   unsigned char *dst, src_byte;
   switch (opcode) {
-  case 0:
-    MOVW_IMM(2);
+  case 0: /* MOVW IMM-IDX, dst operand is first */
+    dest_addr = getop_addr(2);
+    dst = getptr(dest_addr);
+    src_word = getop(0);
+    src_word = (src_word << 8) | getop(0);
+    *(unsigned short *)dst = htons(src_word);
     return;
-  case 1:
-  case 9:
-    MOV_ADDR(2, 3);
-  case 2:
-  case 10:
-    MOV_ADDR(2, 2);
-  case 3:
-    MOVW_IMM(3);
+  case 1: /* MOVW EXT-IDX, dst operand is first */
+  case 9: /* MOVB EXT-IDX, dst operand is first */
+    MOV_ADDR(dest, 2, src, 3);
+  case 2: /* MOVW IDX-IDX, src operand is first */
+  case 10:/* MOVB IDX-IDX, src operand is first */
+    MOV_ADDR(src, 2, dest, 2);
+  case 3: /* MOVW IMM-EXT, src operand is first */
+    src_word = getop(0);
+    src_word = (src_word << 8) | getop(0);
+    dest_addr = getop_addr(3);
+    dst = getptr(dest_addr);
+    *(unsigned short *)dst = htons(src_word);
     return;
-  case 4:
-  case 12:
-    MOV_ADDR(3, 3);
-  case 5:
-  case 13:
-    MOV_ADDR(3, 2);
-  case 8:
-    MOVB_IMM(2);
+  case 4:  /* MOVW EXT-EXT, src operand is first */
+  case 12: /* MOVB EXT-EXT, src operand is first */
+    MOV_ADDR(src, 3, dest, 3);
+  case 5:  /* MOVW IDX-EXT, src operand is first */
+  case 13: /* MOVB IDX-EXT, src operand is first */
+    MOV_ADDR(src, 2, dest, 3);
+  case 8: /* MOVB IMM-IDX, dst operand is first */
+    dest_addr = getop_addr(2);
+    dst = getptr(dest_addr);
+    src_byte = getop(0);
+    *dst = src_byte;
     return;
-  case 11:
-    MOVB_IMM(3);
+  case 11: /* MOVB IMM-EXT, src operand is first */
+    src_byte = getop(0);
+    dest_addr = getop_addr(3);
+    dst = getptr(dest_addr);
+    *dst = src_byte;
     return;
   case 14: /* TAB */
     ACCUM_B = ACCUM_A;
