@@ -1016,14 +1016,14 @@ void clr_tst_accum(unsigned char opcode) {
 	switch ((operand & FIRST_HALF) >> 4) {
 	case 0:
 	  if (reg) {
-	    *reg = ACCUM_A;
+	    *reg = (int8_t) ACCUM_A;
 	  } else {
 	    *accum = ACCUM_A;
 	  }
 	  break;
 	case 1:
 	  if (reg) {
-	    *reg = ACCUM_B;
+	    *reg = (int8_t) ACCUM_B;
 	  } else {
 	    *accum = ACCUM_B;
 	  }
