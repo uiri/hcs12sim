@@ -232,16 +232,16 @@ short branch(unsigned char opcode) {
     if (!FLAG_N) return 0;
     break;
   case 12: /* GE */
-    if (FLAG_N^FLAG_V) return 0;
+    if (!FLAG_N^!FLAG_V) return 0;
     break;
   case 13: /* LT */
-    if (!(FLAG_N^FLAG_V)) return 0;
+    if (!(!FLAG_N^!FLAG_V)) return 0;
     break;
   case 14: /* GT */
-    if (FLAG_Z | (FLAG_N^FLAG_V)) return 0;
+    if (FLAG_Z | (!FLAG_N^!FLAG_V)) return 0;
     break;
   case 15: /* LE */
-    if (!(FLAG_Z | (FLAG_N^FLAG_V))) return 0;
+    if (!(FLAG_Z | (!FLAG_N^!FLAG_V))) return 0;
     break;
   default:
     return 0;
