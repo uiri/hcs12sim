@@ -21,9 +21,7 @@ extern unsigned char ppage;
 
 #define CREMENT(a) five_bits++;\
   if (five_bits > 8) {\
-    five_bits -= 8;\
-    five_bits = ((~five_bits) + 1) & SECOND_HALF;\
-    five_bits *= -1;\
+    five_bits -= 17;\
   }\
   if (!(idx & FIFTH_BIT)) {\
     a += five_bits;\
