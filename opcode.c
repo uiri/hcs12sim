@@ -804,6 +804,7 @@ void std(unsigned char opcode) {
   unsigned short* mem;
   if (!(opcode & LAST_QUARTER)) {
     bset(1);
+    return;
   }
   addr = getop_addr(opcode);
   mem = (unsigned short*)getptr(addr);
@@ -816,6 +817,7 @@ void sty(unsigned char opcode) {
   unsigned short* mem;
   if (!(opcode & LAST_QUARTER)) {
     bclr(1);
+    return;
   }
   addr = getop_addr(opcode);
   mem = (unsigned short*)getptr(addr);
@@ -828,6 +830,7 @@ void stx(unsigned char opcode) {
   unsigned short* mem;
   if (!(opcode & LAST_QUARTER)) {
     brset(1);
+    return;
   }
   addr = getop_addr(opcode);
   mem = (unsigned short*)getptr(addr);
@@ -840,6 +843,7 @@ void sts(unsigned char opcode) {
   unsigned short* mem;
   if (!(opcode & LAST_QUARTER)) {
     brclr(1);
+    return;
   }
   addr = getop_addr(opcode);
   mem = (unsigned short*)getptr(addr);
