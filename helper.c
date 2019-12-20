@@ -30,7 +30,7 @@ unsigned char readbyte(unsigned short addr) {
   }
   for (l = seglist;l != NULL;l = l->next) {
     s = l->data;
-    if (s->addr <= addr && addr <= (s->addr + s->len)) {
+    if (s->addr <= addr && addr < (s->addr + s->len)) {
       /* if (addr+1 == pc) { */
       /* 	printbyte(s->buf[addr - s->addr]); */
       /* } */
@@ -45,7 +45,7 @@ unsigned char* getptr(unsigned short addr) {
   Segment* s;
   for (l = seglist;l != NULL;l = l->next) {
     s = l->data;
-    if (s->addr <= addr && addr <= (s->addr + s->len)) {
+    if (s->addr <= addr && addr < (s->addr + s->len)) {
       return &(s->buf[addr - s->addr]);
     }
   }

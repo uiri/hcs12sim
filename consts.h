@@ -1,8 +1,19 @@
 #ifndef CONSTANTS
 #define CONSTANTS
 
+#ifdef __BYTE_ORDER__
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#define ACCUM_A d.accum[0]
+#define ACCUM_B d.accum[1]
+#else
 #define ACCUM_A d.accum[1]
 #define ACCUM_B d.accum[0]
+#endif
+#else
+/* Assume little-endian */
+#define ACCUM_A d.accum[1]
+#define ACCUM_B d.accum[0]
+#endif
 
 #define MSB_SET 0x80
 #define SMSB_SET 0x40
